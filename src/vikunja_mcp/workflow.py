@@ -472,6 +472,7 @@ class Workflow:
         notifier: WebhookNotifier | None = None, wip_limit: int | None = None,
         require_review_independence: bool = False, language: str = DEFAULT_LANGUAGE,
         siblings: dict[str, int] | None = None, assigned_only: bool = False,
+        wip_limits: dict[str, int] | None = None,
     ):
         # #992: refuse a non-int HERE. Passed a Config (the measured mistake — `Workflow(api,
         # cfg)` instead of `Workflow(api, cfg.project_id)`), the object used to be stored
@@ -510,6 +511,7 @@ class Workflow:
         # means the repo toml set no wip_limit — NOT "no gate": the fallback is the legacy flag (1)
         # or DEFAULT_WIP_LIMIT. See _effective_wip_limit for the precedence.
         self.wip_limit = wip_limit
+        self.wip_limits = dict(wip_limits or {})
         # committed team policy (#37): when true, review_task refuses a verdict from a caller
         # listed in the card's own assignees. DEFAULT FALSE and inert — see review_task's gate
         # and config.Config for why "no authorship check" is the CONDITION OF OPERATION in a
@@ -678,6 +680,12 @@ class Workflow:
         next actions, and the third is not even a toml edit. Computed HERE rather than in a
         sibling helper on purpose: a second copy of this if/elif is a lie waiting to happen,
         and a message that names the wrong knob is worse than one that names none."""
+        username = self._me().get("username")
+        if username in self.wip_limits:
+            return (
+                self.wip_limits[username],
+                f"the `wip_limits.{username}` key in the repo's .vikunja-mcp.toml",
+            )
         if self.wip_limit is not None:
             return self.wip_limit, "the `wip_limit` key in the repo's .vikunja-mcp.toml"
         if self.enforce_single_wip:

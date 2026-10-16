@@ -362,6 +362,7 @@ def _build_workflow(cfg) -> Workflow:
         VikunjaAPI(cfg.url, cfg.token), cfg.project_id,
         enforce_single_wip=cfg.enforce_single_wip,
         wip_limit=cfg.wip_limit,
+        wip_limits=cfg.wip_limits,
         notifier=notifier,
         require_review_independence=cfg.require_review_independence,
         assigned_only=cfg.assigned_only,

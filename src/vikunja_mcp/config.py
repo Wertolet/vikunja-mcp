@@ -70,6 +70,9 @@ class Config:
     # HERE is exactly what keeps that precedence expressible (resolve the default in this
     # dataclass and the legacy flag could never be reached).
     wip_limit: int | None = None
+    # Optional per-identity overrides, keyed by Vikunja username. This remains committed team
+    # policy beside wip_limit; it is never read from an environment variable or secret file.
+    wip_limits: dict[str, int] = field(default_factory=dict)
     # committed TEAM POLICY of the same class as wip_limit — repo toml ONLY, never env, never a
     # secret: when true, review_task refuses a verdict from someone listed in the card's own
     # assignees ("your own work is not yours to review", tracker #37).
@@ -297,6 +300,26 @@ def load_config(cwd: Path | None = None, environ: Mapping[str, str] | None = Non
                 f"default of {DEFAULT_WIP_LIMIT}; there is no spelling for 'no limit'"
             )
 
+    raw_wip_limits = repo.get("wip_limits", {})
+    if not isinstance(raw_wip_limits, dict):
+        raise ConfigError(
+            f"wip_limits must be a table of username = limit, got {raw_wip_limits!r}"
+        )
+    wip_limits: dict[str, int] = {}
+    for raw_username, raw_user_limit in raw_wip_limits.items():
+        username = str(raw_username).strip()
+        if not username:
+            raise ConfigError("a wip_limits entry has a blank username")
+        if isinstance(raw_user_limit, bool) or not isinstance(raw_user_limit, int):
+            raise ConfigError(
+                f"wip_limits.{username} must be a number, got {raw_user_limit!r}"
+            )
+        if raw_user_limit < 1:
+            raise ConfigError(
+                f"wip_limits.{username} must be >= 1 (got {raw_user_limit})"
+            )
+        wip_limits[username] = raw_user_limit
+
     # `repo` ONLY, like enforce_single_wip/require_review_independence below and unlike the
     # machine-local worktree_root: committed team policy is stated in a file the whole team
     # reviews. Absent -> the default; present and unknown -> refused by name.
@@ -375,6 +398,7 @@ def load_config(cwd: Path | None = None, environ: Mapping[str, str] | None = Non
         assigned_only=bool(repo.get("assigned_only", False)),
         notify_webhook=notify_webhook,
         wip_limit=wip_limit,
+        wip_limits=wip_limits,
         worktree_root=worktree_root,
         language=language,
         siblings=siblings,

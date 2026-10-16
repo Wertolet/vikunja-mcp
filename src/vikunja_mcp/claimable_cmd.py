@@ -486,6 +486,7 @@ def run_claimable() -> int:
             VikunjaAPI(cfg.url, cfg.token, event_hooks={"request": [trail]}), cfg.project_id,
             enforce_single_wip=cfg.enforce_single_wip,
             wip_limit=cfg.wip_limit,
+            wip_limits=cfg.wip_limits,
             # THE CONSTRUCTION SITE IS PART OF THE NO-DRIFT PROPERTY (VMCP-295, 1169). This
             # kwarg was absent here from the day the flag existed (#37), on a justification that
             # was TRUE then — `review_task` was its only reader — and that quietly stopped being
