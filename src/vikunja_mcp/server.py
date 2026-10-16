@@ -364,6 +364,7 @@ def _build_workflow(cfg) -> Workflow:
         wip_limit=cfg.wip_limit,
         notifier=notifier,
         require_review_independence=cfg.require_review_independence,
+        assigned_only=cfg.assigned_only,
         language=cfg.language,
         siblings=cfg.siblings,
     )

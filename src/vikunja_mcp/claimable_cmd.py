@@ -515,6 +515,7 @@ def run_claimable() -> int:
             # two sites and treats its own `_DECLARED_ABSENCES` as the WHOLE of the permitted
             # difference — in both directions, and with a stale declaration a red of its own.
             require_review_independence=cfg.require_review_independence,
+            assigned_only=cfg.assigned_only,
             # `language` is emitted by next_task itself — the one call this command makes — so
             # without this line the payload would report a `ru` project as `en`. classify_next
             # reduces it to the three-key hub contract and never reads it, so the VERDICT cannot

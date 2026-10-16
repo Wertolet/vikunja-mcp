@@ -90,6 +90,11 @@ class Config:
     # `approve` writes the `reviewed` label a human reads when deciding Done, so a self-approved
     # card is indistinguishable after the fact from an independently accepted one.
     require_review_independence: bool = False
+    # committed TEAM POLICY, repo toml ONLY: when true, next_task never offers an UNASSIGNED
+    # Queue card and claim() refuses one, so a token only works cards a human assigned to it.
+    # This is how several identities split one board by role (one bot for code, one for art).
+    # Review offers are unaffected. Default off.
+    assigned_only: bool = False
     # Slack-compatible incoming-webhook URL pinged when call_human parks a card in
     # Your Call (#252). A secret of the token's class — whoever holds the URL can post
     # into the humans' channel — so like the token it is NEVER read from the committed
@@ -367,6 +372,7 @@ def load_config(cwd: Path | None = None, environ: Mapping[str, str] | None = Non
         # machine-local worktree_root. A project that wants the gate says so in a file its
         # whole team reviews, not in one machine's environment.
         require_review_independence=bool(repo.get("require_review_independence", False)),
+        assigned_only=bool(repo.get("assigned_only", False)),
         notify_webhook=notify_webhook,
         wip_limit=wip_limit,
         worktree_root=worktree_root,

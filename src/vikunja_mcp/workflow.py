@@ -471,7 +471,7 @@ class Workflow:
         self, api: Any, project_id: int, enforce_single_wip: bool = False,
         notifier: WebhookNotifier | None = None, wip_limit: int | None = None,
         require_review_independence: bool = False, language: str = DEFAULT_LANGUAGE,
-        siblings: dict[str, int] | None = None,
+        siblings: dict[str, int] | None = None, assigned_only: bool = False,
     ):
         # #992: refuse a non-int HERE. Passed a Config (the measured mistake — `Workflow(api,
         # cfg)` instead of `Workflow(api, cfg.project_id)`), the object used to be stored
@@ -515,6 +515,7 @@ class Workflow:
         # and config.Config for why "no authorship check" is the CONDITION OF OPERATION in a
         # solo setup rather than a hole in one. Off, review_task does not even resolve `me()`.
         self.require_review_independence = require_review_independence
+        self.assigned_only = assigned_only
         # committed team policy (#1165), repo toml ONLY like the two flags above: which language
         # this project's cards are written in. It governs the prose THIS tool authors (every
         # `card_text` call below) and, through next_task's payload plus a SKILL.md rule, the
@@ -2136,6 +2137,15 @@ class Workflow:
         # free unassigned Queue card came BACK though it was excluded, while the SAME card
         # claimed (Design), assigned-but-still-in-Queue, and in Review was withheld — so the
         # discriminator is the BRANCH, never the id, the list length or its order.
+        if self.assigned_only:
+            return with_wip({
+                "task": None,
+                "message": "no Queue card is assigned to you — no work for the agent",
+                "note": (
+                    "assigned_only is on for this project: you only take Queue cards a human "
+                    "assigned to you, never unassigned ones. Don't claim anything else"
+                ),
+            })
         offerable_queue = [
             t for t in board.get("Queue", [])
             if not self._assignee_ids(t)
@@ -2520,6 +2530,11 @@ class Workflow:
         if existing and not self_heal:
             names = ", ".join(a.get("username", "?") for a in existing)
             raise WorkflowError(f"already taken ({names}) — grab the next one via next_task")
+        if self.assigned_only and not self_heal:
+            raise WorkflowError(
+                f"{self._ref(task)} is not assigned to you, and assigned_only is on for this "
+                f"project — you only take cards a human assigned to you. Grab yours via next_task"
+            )
 
         if not self_heal:
             self.api.add_assignee(task_id, me["id"])
