@@ -1485,6 +1485,23 @@ row rewritten into a lie about the board passes; that question stays with
 record — eighteen mutation rounds against four controls, plus two whole-suite rounds — is in
 the new test's own docstring.
 
+## Shared WIP claims are serialized and Review consumes the pool
+
+The shared ceiling cannot be implemented as another read-then-write check alone. Two MCP
+processes can both read a 2/3 board before either assignment is visible, then both move a card
+to Design and leave 4/3. Vikunja exposes no compare-and-set transition for this workflow, so a
+configured shared claim takes a project-scoped advisory file lock around the whole existing
+claim transaction: fresh board read, both WIP checks, assign-and-verify, move, and journal
+comment. The lock lives in the OS temporary directory, not the repository, and unconfigured
+projects do not acquire it. This guarantee is intentionally local to processes sharing the
+runtime filesystem; agents on separate hosts still need a server-side coordination mechanism.
+
+The two counts deliberately differ. `_my_active_tasks` remains the identity's Design/Build set,
+preserving the established personal-limit and rework semantics. `_shared_wip_tasks` is the
+board-wide Design/Build/Review set. `next_task` computes effective `wip.free` as the minimum of
+the two capacities, but keeps review and resume branches ahead of saturation: finishing existing
+work must remain possible when starting new work is forbidden.
+
 ## `file_task` requires `breaks`; text findings are dropped (#1987)
 
 Asked for by the human after the board kept filling with low-value cards. Measured at `01108ae`:

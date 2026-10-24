@@ -107,6 +107,7 @@ VIKUNJA_TOKEN=<admin token> uvx --from git+https://github.com/ufna/vikunja-mcp@s
 url = "https://vikunja.example.com"
 project_id = 12
 wip_limit = 3          # how many Design/Build tasks one token may claim into at once
+shared_wip_limit = 3   # optional total across Design, Build, and Review for every identity
 language = "en"        # "en" | "ru" — what language cards are written in
 ```
 
@@ -199,11 +200,13 @@ Two rules make that split matter, and they run in opposite directions:
 
 - **A secret is never read from the toml.** Not the token, not the webhook URL. So the
   committed file cannot leak one even by accident.
-- **Team policy is never read from the environment.** `wip_limit`,
+- **Team policy is never read from the environment.** `wip_limit`, `shared_wip_limit`,
   `require_review_independence` and `language` are toml-only, because they describe how *the
   project* works, not which machine you're on. Unset, `wip_limit` is **3** — not "unlimited";
   `wip_limit = 0` is a config error, because "no limit" is deliberately not expressible. Unset,
-  `language` is `"en"`, and an unrecognised value is a config error for the same reason.
+  `shared_wip_limit` is disabled. When set, it counts every card in Design, Build, or Review
+  across every identity, and `claim` enforces the smaller remaining capacity. `language` is
+  `"en"` when unset, and an unrecognised value is a config error for the same reason.
 
 `worktree_root` sits on the machine side of that line, so there the environment does win.
 

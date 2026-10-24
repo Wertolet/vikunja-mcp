@@ -11,6 +11,8 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
+from functools import wraps
 from typing import Any
 
 import httpx
@@ -34,6 +36,7 @@ STAGES = ["Backlog", "Queue", "Design", "Build", "Review", "Your Call", "Done", 
 # `_predecessor_frozen` for what that last one costs and how the cost is paid.
 REQUIRED_STAGES = [s for s in STAGES if s != "Icebox"]
 ACTIVE_STAGES = ("Design", "Build")
+SHARED_WIP_STAGES = (*ACTIVE_STAGES, "Review")
 # The only stages next_task ever inspects (Queue for free/stuck tasks, Design/Build for my
 # active ones, Review for bug re-review). It never reads Done/Backlog/Your Call, so its board
 # fetch passes these as view_tasks(require_titles=...) — the unboundedly-growing Done is no
@@ -466,13 +469,75 @@ class WorkflowError(Exception):
     """The message is shown to the agent as the tool result."""
 
 
+@contextmanager
+def _project_claim_lock(project_id: int):
+    """Serialize claims from separate agent processes sharing one container.
+
+    The board API has no compare-and-set primitive: without a process-external lock, two
+    identities can both observe 2/3 and both enter the pipeline. The lock is deliberately in
+    the OS temp directory rather than the repo, so it never becomes project state or inherits
+    one agent user's restrictive ownership. Project ids are enough for this deployment; a
+    collision across two tracker servers merely serializes their claims and cannot weaken a
+    gate.
+    """
+    path = os.path.join(tempfile.gettempdir(), f"vikunja-mcp-claim-{project_id}.lock")
+    if os.name == "nt":
+        import msvcrt
+
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
+        handle = os.fdopen(fd, "r+b", buffering=0)
+        try:
+            if os.fstat(fd).st_size == 0:
+                handle.write(b"\0")
+            handle.seek(0)
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        finally:
+            handle.close()
+        return
+
+    import fcntl
+
+    fd = os.open(path, os.O_CREAT | os.O_RDONLY, 0o666)
+    try:
+        # O_RDONLY plus world-readable mode lets both container users open the same inode even
+        # under a restrictive umask; flock itself does not require write access.
+        try:
+            os.fchmod(fd, 0o666)
+        except PermissionError:
+            pass
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def _serialize_shared_claim(method):
+    """Apply the cross-process lock only to projects that enable the shared ceiling."""
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        if self.shared_wip_limit is None:
+            return method(self, *args, **kwargs)
+        with _project_claim_lock(self.project_id):
+            return method(self, *args, **kwargs)
+
+    return guarded
+
+
 class Workflow:
     def __init__(
         self, api: Any, project_id: int, enforce_single_wip: bool = False,
         notifier: WebhookNotifier | None = None, wip_limit: int | None = None,
         require_review_independence: bool = False, language: str = DEFAULT_LANGUAGE,
         siblings: dict[str, int] | None = None, assigned_only: bool = False,
-        wip_limits: dict[str, int] | None = None,
+        wip_limits: dict[str, int] | None = None, shared_wip_limit: int | None = None,
     ):
         # #992: refuse a non-int HERE. Passed a Config (the measured mistake — `Workflow(api,
         # cfg)` instead of `Workflow(api, cfg.project_id)`), the object used to be stored
@@ -512,6 +577,7 @@ class Workflow:
         # or DEFAULT_WIP_LIMIT. See _effective_wip_limit for the precedence.
         self.wip_limit = wip_limit
         self.wip_limits = dict(wip_limits or {})
+        self.shared_wip_limit = shared_wip_limit
         # committed team policy (#37): when true, review_task refuses a verdict from a caller
         # listed in the card's own assignees. DEFAULT FALSE and inert — see review_task's gate
         # and config.Config for why "no authorship check" is the CONDITION OF OPERATION in a
@@ -598,6 +664,22 @@ class Workflow:
             for stage in ACTIVE_STAGES
             for t in by_stage.get(stage, [])
             if my_id in self._assignee_ids(t)
+        ]
+
+    def _shared_wip_tasks(self, board: list[dict] | None = None) -> list[tuple[str, dict]]:
+        """Every board card consuming the optional shared delivery pool.
+
+        Review deliberately counts: implementation may be finished, but the card is still in
+        flight until its verdict is accepted and a human moves it to Done. This count is
+        board-wide rather than assignee-filtered, so two identities cannot each spend the same
+        pool independently.
+        """
+        raw = self._board() if board is None else board
+        by_stage = {b["title"]: (b.get("tasks") or []) for b in raw}
+        return [
+            (stage, task)
+            for stage in SHARED_WIP_STAGES
+            for task in by_stage.get(stage, [])
         ]
 
     def liveness_board(self) -> list[dict]:
@@ -1850,11 +1932,24 @@ class Workflow:
         # server.py's `next_task` docstring addresses the AGENT, not whoever edits these filters.
         excluded = set(exclude or [])
         limit = self._effective_wip_limit()
+        personal_free = max(0, limit - len(mine))
+        shared_saturated = False
         wip = {
             "active": len(mine),
             "limit": limit,
-            "free": max(0, limit - len(mine)),
+            "free": personal_free,
         }
+        if self.shared_wip_limit is not None:
+            shared_active = len(self._shared_wip_tasks(raw))
+            shared_free = max(0, self.shared_wip_limit - shared_active)
+            shared_saturated = shared_free == 0
+            wip["free"] = min(personal_free, shared_free)
+            wip["shared"] = {
+                "active": shared_active,
+                "limit": self.shared_wip_limit,
+                "free": shared_free,
+                "stages": list(SHARED_WIP_STAGES),
+            }
 
         def with_wip(result: dict) -> dict:
             result["wip"] = wip
@@ -1931,7 +2026,13 @@ class Workflow:
                     f"clears when it reaches Review. Don't 'fix' the board and don't "
                     f"call_human about it"
                 )
-            if wip["free"] == 0:
+            if wip["free"] == 0 and shared_saturated:
+                note += (
+                    ". NOTE: the shared WIP pool is full, but resuming this existing card is "
+                    "allowed and does not consume another slot. Do NOT dispatch a second agent "
+                    "onto it; include its id in `exclude` while that agent remains live"
+                )
+            elif wip["free"] == 0:
                 # #527: THIS branch returns before the free == 0 slot guard below, so a caller
                 # whose `exclude` misses even one in-flight task gets a resume here and never
                 # sees wip_saturated — the same board in the same minute answers
@@ -1996,7 +2097,14 @@ class Workflow:
             # Pure string building — next_task stays READ-ONLY BY CONTRACT (see the top of this
             # method). Conditional on free == 0 so the ordinary stuck claim keeps a byte-identical
             # note.
-            if wip["free"] == 0:
+            if wip["free"] == 0 and shared_saturated:
+                note += (
+                    ". NOTE: the shared WIP pool is full, so claim(task_id) will be REFUSED "
+                    "until a Design, Build, or Review card leaves the shared pipeline. Put "
+                    "this id in `exclude` for the rest of the tick and do NOT dispatch an "
+                    "agent onto it yet"
+                )
+            elif wip["free"] == 0:
                 note += (
                     ". NOTE: wip.free == 0, so claim(task_id) will be REFUSED right now (\"WIP "
                     "limit reached\") — the slot gate stands between this instruction and Design. "
@@ -2098,13 +2206,22 @@ class Workflow:
         # `starving` describes a chain that cannot start, which is not the actionable fact when
         # there is nowhere to put a task anyway (and computing it can cost a board escalation).
         if wip["free"] == 0:
+            if shared_saturated:
+                shared = wip["shared"]
+                message = (
+                    f"the shared WIP pool is full ({shared['active']}/{shared['limit']} across "
+                    "Design, Build, and Review) — nothing new can be claimed until a card "
+                    "leaves that pipeline"
+                )
+            else:
+                message = (
+                    f"all {limit} personal WIP slot(s) are busy ({wip['active']} active) — "
+                    "nothing can be claimed until one finishes"
+                )
             return with_wip({
                 "task": None,
                 "wip_saturated": True,
-                "message": (
-                    f"all {limit} WIP slot(s) are busy ({wip['active']} active) — "
-                    f"nothing can be claimed until one finishes"
-                ),
+                "message": message,
                 "note": (
                     "NOT an empty queue: wait for a dispatched agent to return, then call "
                     "next_task again. Do NOT claim, and do NOT end the tick / ScheduleWakeup "
@@ -2473,6 +2590,7 @@ class Workflow:
             ),
         }
 
+    @_serialize_shared_claim
     def claim(self, task_id: int) -> dict:
         board = self._board()
         task, stage = self._find_task(task_id, board=board)
@@ -2519,6 +2637,16 @@ class Workflow:
         # _my_active_tasks() with no board and paid for a SECOND full board fetch per gated claim.
         limit, limit_origin = self._wip_limit_with_origin()
         active = self._my_active_tasks(board=board)
+        if self.shared_wip_limit is not None:
+            shared = self._shared_wip_tasks(board=board)
+            if len(shared) >= self.shared_wip_limit:
+                cards = ", ".join(f"#{task['id']} ({stage})" for stage, task in shared)
+                raise WorkflowError(
+                    f"Shared WIP limit reached ({len(shared)}/{self.shared_wip_limit}) — "
+                    f"Design, Build, and Review currently hold {cards}. That number comes "
+                    "from the `shared_wip_limit` key in the repo's .vikunja-mcp.toml. Move "
+                    "one card out of the shared pipeline before claiming another"
+                )
         if len(active) >= limit:
             names = ", ".join(f"#{t['id']}" for _stage, t in active)
             # Name the KNOB, not just the number (tracker #517): a surprising refusal is the one

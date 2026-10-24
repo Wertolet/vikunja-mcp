@@ -178,6 +178,26 @@ replaced roughly the phrase it fetches, so the count stopped being evidence abou
 that scan still catches alone is non-ASCII typed straight into an `add_comment` argument, which
 is the shape a new card line takes before anyone thinks about the table.
 
+## `shared_wip_limit` — one delivery pool across identities
+
+`wip_limit` and `wip_limits` answer how many Design/Build cards one identity may claim into.
+They cannot express a project-wide ceiling: limits 2 and 3 permit five cards when both users
+fill their own pools. `shared_wip_limit` is therefore a separate, optional repo-toml-only key.
+It counts each board card in Design, Build, or Review once, regardless of assignee. Review is
+intentional: the implementation may be complete, but delivery is still in flight until the
+verdict is accepted and a human moves the card to Done.
+
+The top-level `wip.free` emitted by `next_task` is effective claim capacity: the smaller of the
+current identity's remaining Design/Build capacity and the board's remaining shared capacity.
+The personal numbers keep their existing meaning in `active` and `limit`; configured projects
+also receive `wip.shared = {active, limit, free, stages}`. An absent key emits the old three-key
+payload byte-for-byte, so existing consumers do not acquire a new policy accidentally.
+
+Like the personal limit, this is a claim gate rather than an invariant. Manual board moves and
+review rework may leave the count above the configured ceiling; new claims then stop until the
+board drains. Review and resume offers stay reachable while saturated because neither creates a
+new card in the pool.
+
 ## `siblings` — the neighbour registry (#1179)
 
 **What created it.** The dogiators setup is two repos on ONE scoped token —

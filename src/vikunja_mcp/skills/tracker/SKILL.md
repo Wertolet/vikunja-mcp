@@ -143,7 +143,12 @@ SessionStart hook's standing context is frozen by the same snapshot: its prose l
 - **The drain's width is set by the config, not by you.** `next_task` returns
   `wip: {active, limit, free}` in EVERY response: `active` — how many tasks you already hold in
   Design/Build, `limit` — how many you are allowed (the `wip_limit` key in the project's repo
-  config; NOT set — the default is **3**), `free` — how many slots are left. Do NOT invent the
+  config; NOT set — the default is **3**), `free` — how many tasks may actually be claimed now.
+  A project with `shared_wip_limit` also returns
+  `wip.shared: {active, limit, free, stages}`. Its `active` is board-wide across EVERY identity
+  and includes Design, Build, AND Review; top-level `free` is the smaller of your personal free
+  slots and the shared free slots. A full shared pool still permits review and resume work, but
+  never a fresh claim. Do NOT invent the
   number of slots and do NOT hardcode it: read it from `wip` every time — the human sets it in
   the project config, and it differs between projects (and between sessions of one). **`limit`
   and `free` are ALWAYS numbers: `null` no longer occurs there, and "no limit" does not exist
@@ -193,7 +198,8 @@ SessionStart hook's standing context is frozen by the same snapshot: its prose l
   handing out a resumable task at `active > limit`, writes it straight into the `note` ("you
   hold N active tasks against a limit of M … Drain the rework"); at `active <= limit` that
   phrase is NOT in the `note` at all — see it, and the overshoot is real.
-- **`wip_saturated: true` is NOT an empty queue.** Every slot is busy, so `next_task` did not
+- **`wip_saturated: true` is NOT an empty queue.** Every personal or shared slot available to
+  this identity is busy, so `next_task` did not
   even LOOK at the free queue: "handed nothing out" here means "nowhere to put it", not "there
   is no work" (how much of it is there, this response does not say). Wait for an agent to return
   and call `next_task`. Do not claim (`claim` refuses on its own — "WIP limit reached") and do

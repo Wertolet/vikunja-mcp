@@ -487,6 +487,7 @@ def run_claimable() -> int:
             enforce_single_wip=cfg.enforce_single_wip,
             wip_limit=cfg.wip_limit,
             wip_limits=cfg.wip_limits,
+            shared_wip_limit=cfg.shared_wip_limit,
             # THE CONSTRUCTION SITE IS PART OF THE NO-DRIFT PROPERTY (VMCP-295, 1169). This
             # kwarg was absent here from the day the flag existed (#37), on a justification that
             # was TRUE then — `review_task` was its only reader — and that quietly stopped being

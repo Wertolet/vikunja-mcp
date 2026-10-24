@@ -88,15 +88,16 @@ measured shape of both exemptions.
   **The token is NEVER read from the repo toml** (so it can't be committed and used);
   optional `VIKUNJA_NOTIFY_WEBHOOK` (`notify.py` — best-effort Slack-shaped ping when
   `call_human` parks a card) is a secret of the same class: env layers only, never the
-  toml. **`wip_limit` sits on the opposite side of that split — repo toml ONLY, never
-  env**, because it is committed TEAM POLICY: how many Design/Build tasks one token may
-  CLAIM into at once. **Unset means `DEFAULT_WIP_LIMIT` = 3, not "no gate"** (tracker
+  toml. **`wip_limit` / `shared_wip_limit` are toml-only TEAM POLICY** for personal
+  Design/Build and board-wide Design/Build/Review claim ceilings.
+  **Unset `wip_limit` means `DEFAULT_WIP_LIMIT` = 3, not "no gate"** (tracker
   #524); precedence is explicit `wip_limit` → else 1 when `enforce_single_wip = true` →
   else 3, resolved in `workflow._effective_wip_limit`. `wip_limit = 0` is a `ConfigError`:
   "no limit" is deliberately not expressible. **It is a gate on ONE transition (`claim`),
   not an invariant on the active count** (tracker #529) — a card re-enters Build without
   passing it, so `wip.active` legitimately EXCEEDS `wip.limit`, and that is correct,
-  because rework must be receivable at the limit. `worktree_root` /
+  because rework must be receivable at the limit. Unset `shared_wip_limit` disables its gate.
+  `worktree_root` /
   `VIKUNJA_WORKTREE_ROOT` is MACHINE-local, so there the env layers DO win over the toml.
   **`require_review_independence` is a third toml-ONLY key, default FALSE** (tracker #37).
   In a SOLO setup one scoped token is the whole fleet, so the ABSENCE of an authorship

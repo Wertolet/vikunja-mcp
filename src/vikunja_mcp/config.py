@@ -73,6 +73,10 @@ class Config:
     # Optional per-identity overrides, keyed by Vikunja username. This remains committed team
     # policy beside wip_limit; it is never read from an environment variable or secret file.
     wip_limits: dict[str, int] = field(default_factory=dict)
+    # Optional board-wide ceiling for cards still in flight. Unlike the per-identity counter,
+    # this includes Review as well as Design/Build: a card awaiting a verdict or a human's Done
+    # transition still occupies shared delivery capacity. Repo toml only, never environment.
+    shared_wip_limit: int | None = None
     # committed TEAM POLICY of the same class as wip_limit — repo toml ONLY, never env, never a
     # secret: when true, review_task refuses a verdict from someone listed in the card's own
     # assignees ("your own work is not yours to review", tracker #37).
@@ -320,6 +324,25 @@ def load_config(cwd: Path | None = None, environ: Mapping[str, str] | None = Non
             )
         wip_limits[username] = raw_user_limit
 
+    raw_shared_limit = repo.get("shared_wip_limit")
+    shared_wip_limit: int | None = None
+    if raw_shared_limit is not None:
+        if isinstance(raw_shared_limit, bool):
+            raise ConfigError(
+                f"shared_wip_limit must be a number, got {raw_shared_limit!r}"
+            )
+        try:
+            shared_wip_limit = int(raw_shared_limit)
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"shared_wip_limit must be a number, got {raw_shared_limit!r}"
+            )
+        if shared_wip_limit < 1:
+            raise ConfigError(
+                f"shared_wip_limit must be >= 1 (got {shared_wip_limit}) — omit the key "
+                "to leave the board-wide gate disabled"
+            )
+
     # `repo` ONLY, like enforce_single_wip/require_review_independence below and unlike the
     # machine-local worktree_root: committed team policy is stated in a file the whole team
     # reviews. Absent -> the default; present and unknown -> refused by name.
@@ -399,6 +422,7 @@ def load_config(cwd: Path | None = None, environ: Mapping[str, str] | None = Non
         notify_webhook=notify_webhook,
         wip_limit=wip_limit,
         wip_limits=wip_limits,
+        shared_wip_limit=shared_wip_limit,
         worktree_root=worktree_root,
         language=language,
         siblings=siblings,
