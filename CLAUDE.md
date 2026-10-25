@@ -89,7 +89,8 @@ measured shape of both exemptions.
   optional `VIKUNJA_NOTIFY_WEBHOOK` (`notify.py` — best-effort Slack-shaped ping when
   `call_human` parks a card) is a secret of the same class: env layers only, never the
   toml. **`wip_limit` / `shared_wip_limit` are toml-only TEAM POLICY** for personal
-  Design/Build and board-wide Design/Build/Review claim ceilings.
+  Design/Build and board-wide Design/Build/pending-Review claim ceilings. Review cards with a
+  `reviewed` or `review-failed` verdict release the shared slot.
   **Unset `wip_limit` means `DEFAULT_WIP_LIMIT` = 3, not "no gate"** (tracker
   #524); precedence is explicit `wip_limit` → else 1 when `enforce_single_wip = true` →
   else 3, resolved in `workflow._effective_wip_limit`. `wip_limit = 0` is a `ConfigError`:

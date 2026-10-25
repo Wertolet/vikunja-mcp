@@ -74,8 +74,9 @@ class Config:
     # policy beside wip_limit; it is never read from an environment variable or secret file.
     wip_limits: dict[str, int] = field(default_factory=dict)
     # Optional board-wide ceiling for cards still in flight. Unlike the per-identity counter,
-    # this includes Review as well as Design/Build: a card awaiting a verdict or a human's Done
-    # transition still occupies shared delivery capacity. Repo toml only, never environment.
+    # this includes Design/Build plus Review cards still awaiting a verdict. A Review card with
+    # `reviewed` or `review-failed` has finished the agent loop and releases its slot while it
+    # waits for a human transition. Repo toml only, never environment.
     shared_wip_limit: int | None = None
     # committed TEAM POLICY of the same class as wip_limit — repo toml ONLY, never env, never a
     # secret: when true, review_task refuses a verdict from someone listed in the card's own

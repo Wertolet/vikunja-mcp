@@ -669,10 +669,13 @@ class Workflow:
     def _shared_wip_tasks(self, board: list[dict] | None = None) -> list[tuple[str, dict]]:
         """Every board card consuming the optional shared delivery pool.
 
-        Review deliberately counts: implementation may be finished, but the card is still in
-        flight until its verdict is accepted and a human moves it to Done. This count is
-        board-wide rather than assignee-filtered, so two identities cannot each spend the same
-        pool independently.
+        Review counts only while a verdict is pending. Once either verdict label is present the
+        agent loop is finished, so waiting for a human to move the card to Done must not consume
+        delivery capacity. A normal needs_work verdict moves the card to Build, where it still
+        counts as rework; this exclusion only applies while the card remains in Review.
+
+        The count is board-wide rather than assignee-filtered, so two identities cannot each
+        spend the same pool independently.
         """
         raw = self._board() if board is None else board
         by_stage = {b["title"]: (b.get("tasks") or []) for b in raw}
@@ -680,6 +683,11 @@ class Workflow:
             (stage, task)
             for stage in SHARED_WIP_STAGES
             for task in by_stage.get(stage, [])
+            if stage != "Review"
+            or not (
+                self._has_label(task, LABEL_REVIEWED)
+                or self._has_label(task, LABEL_REVIEW_FAILED)
+            )
         ]
 
     def liveness_board(self) -> list[dict]:
@@ -2643,7 +2651,7 @@ class Workflow:
                 cards = ", ".join(f"#{task['id']} ({stage})" for stage, task in shared)
                 raise WorkflowError(
                     f"Shared WIP limit reached ({len(shared)}/{self.shared_wip_limit}) — "
-                    f"Design, Build, and Review currently hold {cards}. That number comes "
+                    f"Design, Build, and pending Review currently hold {cards}. That number comes "
                     "from the `shared_wip_limit` key in the repo's .vikunja-mcp.toml. Move "
                     "one card out of the shared pipeline before claiming another"
                 )

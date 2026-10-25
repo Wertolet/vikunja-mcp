@@ -107,7 +107,7 @@ VIKUNJA_TOKEN=<admin token> uvx --from git+https://github.com/ufna/vikunja-mcp@s
 url = "https://vikunja.example.com"
 project_id = 12
 wip_limit = 3          # how many Design/Build tasks one token may claim into at once
-shared_wip_limit = 3   # optional total across Design, Build, and Review for every identity
+shared_wip_limit = 3   # optional total across Design, Build, and unresolved Review
 language = "en"        # "en" | "ru" — what language cards are written in
 ```
 
@@ -204,8 +204,10 @@ Two rules make that split matter, and they run in opposite directions:
   `require_review_independence` and `language` are toml-only, because they describe how *the
   project* works, not which machine you're on. Unset, `wip_limit` is **3** — not "unlimited";
   `wip_limit = 0` is a config error, because "no limit" is deliberately not expressible. Unset,
-  `shared_wip_limit` is disabled. When set, it counts every card in Design, Build, or Review
-  across every identity, and `claim` enforces the smaller remaining capacity. `language` is
+  `shared_wip_limit` is disabled. When set, it counts every card in Design or Build plus Review
+  cards that do not yet carry `reviewed` or `review-failed`, across every identity. A completed
+  verdict releases the shared slot while the card waits for a human transition; rework moved to
+  Build still counts. `claim` enforces the smaller remaining capacity. `language` is
   `"en"` when unset, and an unrecognised value is a config error for the same reason.
 
 `worktree_root` sits on the machine side of that line, so there the environment does win.

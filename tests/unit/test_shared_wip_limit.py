@@ -5,7 +5,13 @@ import pytest
 
 from tests.unit.fakes import FakeAPI
 from vikunja_mcp.config import ConfigError, load_config
-from vikunja_mcp.workflow import STAGES, Workflow, WorkflowError
+from vikunja_mcp.workflow import (
+    LABEL_REVIEWED,
+    LABEL_REVIEW_FAILED,
+    STAGES,
+    Workflow,
+    WorkflowError,
+)
 
 
 def _env(*, username="claude-developer", **kwargs):
@@ -78,6 +84,16 @@ def test_review_cards_consume_the_shared_pool_and_remain_reviewable():
     assert offered["wip"]["free"] == 0
     with pytest.raises(WorkflowError, match=r"Shared WIP limit reached \(3/3\)"):
         wf.claim(queued["id"])
+
+
+@pytest.mark.parametrize("verdict_label", [LABEL_REVIEWED, LABEL_REVIEW_FAILED])
+def test_review_cards_with_a_completed_verdict_release_the_shared_slot(verdict_label):
+    api, wf = _env(shared_wip_limit=1)
+    api.add_task("verdict recorded", "Review", assignee=_other(), labels=(verdict_label,))
+    queued = api.add_task("next delivery", "Queue")
+
+    assert wf.next_task()["wip"]["shared"]["active"] == 0
+    assert wf.claim(queued["id"])["claimed"] is True
 
 
 def test_effective_free_is_the_smaller_of_personal_and_shared_capacity():

@@ -1485,7 +1485,7 @@ row rewritten into a lie about the board passes; that question stays with
 record — eighteen mutation rounds against four controls, plus two whole-suite rounds — is in
 the new test's own docstring.
 
-## Shared WIP claims are serialized and Review consumes the pool
+## Shared WIP claims are serialized and pending Review consumes the pool
 
 The shared ceiling cannot be implemented as another read-then-write check alone. Two MCP
 processes can both read a 2/3 board before either assignment is visible, then both move a card
@@ -1498,9 +1498,11 @@ runtime filesystem; agents on separate hosts still need a server-side coordinati
 
 The two counts deliberately differ. `_my_active_tasks` remains the identity's Design/Build set,
 preserving the established personal-limit and rework semantics. `_shared_wip_tasks` is the
-board-wide Design/Build/Review set. `next_task` computes effective `wip.free` as the minimum of
-the two capacities, but keeps review and resume branches ahead of saturation: finishing existing
-work must remain possible when starting new work is forbidden.
+board-wide Design/Build set plus Review cards without a `reviewed` or `review-failed` verdict.
+A completed verdict releases capacity even while the card waits for a human transition to Done;
+a failed review moved into Build still counts as rework. `next_task` computes effective
+`wip.free` as the minimum of the two capacities, but keeps review and resume branches ahead of
+saturation: finishing existing work must remain possible when starting new work is forbidden.
 
 ## `file_task` requires `breaks`; text findings are dropped (#1987)
 

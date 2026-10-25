@@ -146,8 +146,10 @@ SessionStart hook's standing context is frozen by the same snapshot: its prose l
   config; NOT set — the default is **3**), `free` — how many tasks may actually be claimed now.
   A project with `shared_wip_limit` also returns
   `wip.shared: {active, limit, free, stages}`. Its `active` is board-wide across EVERY identity
-  and includes Design, Build, AND Review; top-level `free` is the smaller of your personal free
-  slots and the shared free slots. A full shared pool still permits review and resume work, but
+  and includes Design, Build, and Review cards that are still awaiting a verdict. A Review card
+  carrying `reviewed` or `review-failed` has released its slot; a failed review moved to Build
+  still counts as rework. Top-level `free` is the smaller of your personal free slots and the
+  shared free slots. A full shared pool still permits review and resume work, but
   never a fresh claim. Do NOT invent the
   number of slots and do NOT hardcode it: read it from `wip` every time — the human sets it in
   the project config, and it differs between projects (and between sessions of one). **`limit`

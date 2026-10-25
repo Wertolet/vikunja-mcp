@@ -183,9 +183,10 @@ is the shape a new card line takes before anyone thinks about the table.
 `wip_limit` and `wip_limits` answer how many Design/Build cards one identity may claim into.
 They cannot express a project-wide ceiling: limits 2 and 3 permit five cards when both users
 fill their own pools. `shared_wip_limit` is therefore a separate, optional repo-toml-only key.
-It counts each board card in Design, Build, or Review once, regardless of assignee. Review is
-intentional: the implementation may be complete, but delivery is still in flight until the
-verdict is accepted and a human moves the card to Done.
+It counts each board card in Design or Build once, regardless of assignee, plus Review cards
+that are still waiting for a verdict. A Review card carrying `reviewed` or `review-failed` has
+finished the agent loop and releases the slot while it waits for a human transition. A normal
+`needs_work` verdict moves the card to Build, so that rework continues to count.
 
 The top-level `wip.free` emitted by `next_task` is effective claim capacity: the smaller of the
 current identity's remaining Design/Build capacity and the board's remaining shared capacity.

@@ -559,8 +559,8 @@ def next_task(exclude: list[int] | None = None) -> dict:
     they are not handed back and dispatched twice. They still occupy their WIP slot. Every
     result carries wip: {active, limit, free} — limit and free are always numbers, never null.
     With shared_wip_limit configured it also carries wip.shared: {active, limit, free, stages};
-    shared active counts Design/Build/Review across every identity, and top-level free is the
-    smaller of personal and shared capacity.
+    shared active counts Design/Build plus Review cards still awaiting a verdict across every
+    identity, and top-level free is the smaller of personal and shared capacity.
     free == 0 comes back as task:null PLUS wip_saturated:true — that means WAIT for an agent to
     return, NOT that the queue is empty. But that signal exists only once `exclude` is COMPLETE:
     your own active tasks are offered (branch 1) BEFORE the slot check, so an unexpected resume
@@ -592,9 +592,10 @@ def claim(task_id: int) -> dict:
     active Design/Build tasks — "WIP limit reached (N/N) — you already hold #… Finish one
     (advance to Review) or return_task it before claiming another". next_task's `wip` payload
     reports the same limit and how many slots are free. A project may also set
-    shared_wip_limit: that board-wide pool counts every card in Design, Build, or Review across
-    all identities. Claim is serialized across local MCP processes and refuses when either the
-    personal or shared pool is full; reviews are still offered while that pool is full.
+    shared_wip_limit: that board-wide pool counts every card in Design or Build plus Review cards
+    without a `reviewed` or `review-failed` verdict across all identities. Claim is serialized
+    across local MCP processes and refuses when either the personal or shared pool is full;
+    reviews are still offered while that pool is full.
     The gate guards THIS transition, and is NOT an invariant on the active count: a card
     re-enters Build WITHOUT passing it when review_task(verdict='needs_work') bounces it back
     from Review, or when a human moves it out of Your Call (or hand-places an assigned card in
