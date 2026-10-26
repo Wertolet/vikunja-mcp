@@ -54,6 +54,15 @@ SessionStart hook's standing context is frozen by the same snapshot: its prose l
   drain tick: it is a write into `~/.claude` for an effect a running session has nothing to
   confirm with anyway.
 
+## Operator command: `Wrap up`
+
+When the human says **`Wrap up`**, enter session-scoped drain-only mode: finish cards already
+active in Design/Build and reviews already dispatched, but claim no Queue card and start no new
+review — including for a build that reaches Review during wrap-up. Do not cancel current agents;
+recover only work already in flight. When that set is drained, report and stop scheduling ticks.
+Remain in this mode until the human explicitly resumes intake. Read
+**`references/wrap-up.md`** when the command is issued; it defines the boundary and recovery cases.
+
 ## Queue discipline
 
 - **Do NOT TAKE more than `wip.limit` tasks yourself** (by default, when `wip_limit` is not set
